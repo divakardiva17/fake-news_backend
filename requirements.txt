@@ -1,6 +1,6 @@
 flask
 flask-cors
 scikit-learn
-nltk
 pandas
+joblib
 gunicorn
