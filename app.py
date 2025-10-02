@@ -1,56 +1,33 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
-import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Load model + vectorizer (must exist in backend/ after training)
-MODEL_PATH = os.path.join("backend", "model.joblib")
-VECTORIZER_PATH = os.path.join("backend", "vectorizer.joblib")
+# Load pre-trained model + vectorizer
+model = joblib.load("backend/model.joblib")
+vectorizer = joblib.load("backend/vectorizer.joblib")
 
-try:
-    model = joblib.load(MODEL_PATH)
-    vectorizer = joblib.load(VECTORIZER_PATH)
-    print("✅ Model and vectorizer loaded successfully")
-except Exception as e:
-    print("❌ Error loading model/vectorizer:", e)
-    model, vectorizer = None, None
-
-
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
-    return jsonify({"message": "Fake News Detector API is running!"})
+    return {"message": "Fake News Detector API is running!"}
 
-
-@app.route("/api/predict", methods=["POST"])
+@app.route("/predict", methods=["POST"])
 def predict():
-    if not model or not vectorizer:
-        return jsonify({"error": "Model not loaded. Please train first."}), 500
+    data = request.json
+    text = data.get("text", "")
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
 
-    try:
-        data = request.get_json()
-        text = data.get("text", "")
+    X = vectorizer.transform([text])
+    pred = model.predict(X)[0]
+    proba = model.predict_proba(X)[0].max()
 
-        if not text.strip():
-            return jsonify({"error": "No text provided"}), 400
-
-        # Transform and predict
-        vec = vectorizer.transform([text])
-        prediction = model.predict(vec)[0]
-        proba = model.predict_proba(vec)[0][prediction]
-
-        result = "REAL" if prediction == 1 else "FAKE"
-        return jsonify({
-            "prediction": result,
-            "confidence": round(float(proba) * 100, 2)
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+    return jsonify({
+        "prediction": "REAL" if pred == 1 else "FAKE",
+        "confidence": round(float(proba) * 100, 2)
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
