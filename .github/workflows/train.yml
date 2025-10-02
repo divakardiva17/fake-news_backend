@@ -1,4 +1,4 @@
-  name: Train Model
+name: Train Model
 
 on:
   workflow_dispatch:   # allows you to trigger manually from Actions tab
@@ -47,5 +47,5 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add backend/model.joblib backend/vectorizer.joblib
-          git commit -m "Update trained model"
+          git commit -m "Update trained model" || echo "No changes to commit"
           git push
