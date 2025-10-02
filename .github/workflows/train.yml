@@ -1,40 +1,51 @@
-name: Train Model
+  name: Train Model
 
 on:
-  workflow_dispatch:   # allows manual trigger
+  workflow_dispatch:   # allows you to trigger manually from Actions tab
 
 jobs:
   train:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      # 1. Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2. Setup Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: "3.9"
 
+      # 3. Install dependencies
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
 
-      - name: Configure Kaggle
+      # 4. Setup Kaggle API
+      - name: Setup Kaggle
         run: |
           mkdir -p ~/.kaggle
-          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          echo '{"username":"${{ secrets.KAGGLE_USERNAME }}","key":"${{ secrets.KAGGLE_KEY }}"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
-        env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
 
+      # 5. Download dataset from Kaggle
+      - name: Download dataset
+        run: |
+          kaggle datasets download -d clmentbisaillon/fake-and-real-news-dataset -p data --unzip
+
+      # 6. Run training script
       - name: Train model
-        run: python backend/train_model.py
+        run: |
+          python backend/train_model.py
 
-      - name: Commit model
+      # 7. Upload trained model back to repo
+      - name: Commit and push model
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add backend/model.joblib backend/vectorizer.joblib
-          git commit -m "Update trained model" || echo "No changes to commit"
+          git commit -m "Update trained model"
           git push
-
