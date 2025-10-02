@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: fake-news-api
-    env: python
-    plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
-    workingDir: backend
-    autoDeploy: true
