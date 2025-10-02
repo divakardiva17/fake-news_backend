@@ -1,36 +1,57 @@
-from kaggle.api.kaggle_api_extended import KaggleApi
-import os, pandas as pd
-from sklearn.model_selection import train_test_split
+import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 import joblib
+import os
 
-HERE = os.path.dirname(__file__)
-csv_path = os.path.join(HERE, "news.csv")
+# Paths
+DATA_DIR = "data"
+FAKE_PATH = os.path.join(DATA_DIR, "Fake.csv")
+REAL_PATH = os.path.join(DATA_DIR, "True.csv")
 
-# Download dataset from Kaggle if not exists
-if not os.path.exists(csv_path):
-    api = KaggleApi()
-    api.authenticate()
-    api.dataset_download_files("clmentbisaillon/fake-and-real-news-dataset", path=HERE, unzip=True)
-    df_true = pd.read_csv(os.path.join(HERE, "True.csv"))
-    df_fake = pd.read_csv(os.path.join(HERE, "Fake.csv"))
-    df_true["label"] = "real"
-    df_fake["label"] = "fake"
-    df = pd.concat([df_true[["text","label"]], df_fake[["text","label"]]])
-    df.to_csv(csv_path, index=False)
+print("🔹 Loading dataset...")
+fake = pd.read_csv(FAKE_PATH)
+real = pd.read_csv(REAL_PATH)
+
+# Add labels
+fake["label"] = 0   # Fake = 0
+real["label"] = 1   # Real = 1
+
+# Combine datasets
+df = pd.concat([fake, real], axis=0).reset_index(drop=True)
+df = df.sample(frac=1, random_state=42).reset_index(drop=True)  # Shuffle
+
+print(f"✅ Dataset loaded: {df.shape[0]} samples")
+
+# Use only title + text
+df["content"] = df["title"].fillna("") + " " + df["text"].fillna("")
+
+X = df["content"]
+y = df["label"]
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Vectorization
+vectorizer = TfidfVectorizer(stop_words="english", max_features=5000)
+X_train_vec = vectorizer.fit_transform(X_train)
+X_test_vec = vectorizer.transform(X_test)
 
 # Train model
-df = pd.read_csv(csv_path)
-X = df["text"].astype(str)
-y = df["label"].astype(str)
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-vectorizer = TfidfVectorizer(ngram_range=(1,2), max_df=0.8, min_df=5, stop_words="english")
-X_train_vec = vectorizer.fit_transform(X_train)
-
-model = LogisticRegression(max_iter=2000)
+print("🔹 Training Logistic Regression...")
+model = LogisticRegression(max_iter=1000)
 model.fit(X_train_vec, y_train)
 
-joblib.dump(model, os.path.join(HERE, "model.joblib"))
-joblib.dump(vectorizer, os.path.join(HERE, "vectorizer.joblib"))
+# Evaluate
+y_pred = model.predict(X_test_vec)
+acc = accuracy_score(y_test, y_pred)
+print(f"✅ Model trained with accuracy: {acc*100:.2f}%")
+
+# Save model + vectorizer
+os.makedirs("backend", exist_ok=True)
+joblib.dump(model, "backend/model.joblib")
+joblib.dump(vectorizer, "backend/vectorizer.joblib")
+
+print("💾 Model and vectorizer saved to backend/")
