@@ -1,62 +1,38 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pickle
-import nltk
-import re
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-
-# If using NLTK resources, ensure you have downloaded them
-# nltk.download('stopwords')
-# nltk.download('wordnet')
-# nltk.download('omw-1.4')
+import joblib, os
 
 app = Flask(__name__)
 CORS(app)
 
-# Load your trained model
-MODEL_PATH = "model.pkl"
-with open(MODEL_PATH, "rb") as f:
-    model = pickle.load(f)
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.joblib")
+VEC_PATH = os.path.join(os.path.dirname(__file__), "vectorizer.joblib")
 
-# Also load any vectorizer you used (TF-IDF, CountVectorizer) 
-# Suppose you saved it similarly as "vectorizer.pkl"
-VECTORIZER_PATH = "vectorizer.pkl"
-with open(VECTORIZER_PATH, "rb") as f:
-    vectorizer = pickle.load(f)
+model, vectorizer = None, None
 
-lemmatizer = WordNetLemmatizer()
-stop_words = set(stopwords.words('english'))
+def load_artifacts():
+    global model, vectorizer
+    if model is None or vectorizer is None:
+        model = joblib.load(MODEL_PATH)
+        vectorizer = joblib.load(VEC_PATH)
 
-def preprocess_text(text):
-    # basic cleaning & preprocessing
-    text = text.lower()
-    text = re.sub(r'[^a-zA-Z]', ' ', text)  # remove non-letters
-    words = text.split()
-    words = [lemmatizer.lemmatize(w) for w in words if w not in stop_words]
-    cleaned = " ".join(words)
-    return cleaned
-
-@app.route("/")
-def home():
-    return "Fake News Detection API is running."
-
-@app.route("/predict", methods=["POST"])
+@app.route("/api/predict", methods=["POST"])
 def predict():
-    data = request.get_json()
-    # Expect JSON: {"text": "some news article text here"}
-    if "text" not in data:
+    data = request.get_json(force=True)
+    text = data.get("text", "")
+    if not text:
         return jsonify({"error": "No text provided"}), 400
 
-    raw_text = data["text"]
-    processed = preprocess_text(raw_text)
-    vect = vectorizer.transform([processed])  # transform into feature vector
-    prediction = model.predict(vect)[0]
-    # If your labels are numeric (0/1), you may want to map to "FAKE"/"REAL"
-    # Example:
-    label_map = {0: "FAKE", 1: "REAL"}
-    label = label_map.get(prediction, str(prediction))
-    return jsonify({"prediction": label})
+    load_artifacts()
+    X = vectorizer.transform([text])
+    pred = model.predict(X)[0]
+    proba = None
+    if hasattr(model, "predict_proba"):
+        proba = float(model.predict_proba(X)[0].max())
+
+    return jsonify({"label": str(pred), "probability": proba})
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
+
